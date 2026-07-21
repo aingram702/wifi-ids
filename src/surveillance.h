@@ -25,3 +25,6 @@ void surveillance_ble_adv(const char* mac, int8_t rssi,
 
 // Count of BLE tracker signatures seen (for heartbeats).
 uint32_t surveillance_ble_hits();
+
+// Count of hacking / pentest devices seen (for heartbeats).
+uint32_t surveillance_hacking_hits();

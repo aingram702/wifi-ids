@@ -9,6 +9,7 @@
 #include <strings.h>  // strcasecmp
 
 static uint32_t s_ble_hits = 0;
+static uint32_t s_hacking_hits = 0;
 
 // ---------------------------------------------------------------------------
 // Ignore list — suppress alerts for the user's own known surveillance devices.
@@ -30,6 +31,7 @@ static bool surv_ignore_ssid(const char* ssid) {
 // ---------------------------------------------------------------------------
 #define SEEN_OUI  0x1
 #define SEEN_SSID 0x2
+#define SEEN_HACK 0x4
 
 struct WifiSeen { uint8_t mac[6]; uint8_t flags; bool used; };
 #define WIFI_SEEN_MAX 128
@@ -75,6 +77,7 @@ void surveillance_init() {
   memset(s_ble_seen, 0, sizeof(s_ble_seen));
   s_ble_next = 0;
   s_ble_hits = 0;
+  s_hacking_hits = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -103,6 +106,19 @@ static void emit_wifi_ssid(const uint8_t* mac, const char* ssid,
     "\"match\":\"ssid\",\"category\":\"%s\",\"vendor\":\"%s\",\"ssid\":\"%s\","
     "\"mac\":\"%s\",\"channel\":%u,\"rssi\":%d}",
     SENSOR_ID, (unsigned long)millis(), k->category, k->vendor, ssid, m, channel, rssi);
+  alert_event(buf);
+}
+
+static void emit_hacking_wifi(const uint8_t* mac, const char* ssid,
+                              const HackSsid* h, uint8_t channel, int8_t rssi) {
+  char m[18];
+  wifi_mac_to_str(mac, m);
+  char buf[352];
+  snprintf(buf, sizeof(buf),
+    "{\"sensor\":\"%s\",\"ts\":%lu,\"type\":\"hacking_device\",\"radio\":\"wifi\","
+    "\"match\":\"ssid\",\"tool\":\"%s\",\"ssid\":\"%s\",\"mac\":\"%s\","
+    "\"channel\":%u,\"rssi\":%d}",
+    SENSOR_ID, (unsigned long)millis(), h->tool, ssid, m, channel, rssi);
   alert_event(buf);
 }
 
@@ -142,18 +158,34 @@ void surveillance_wifi_frame(const uint8_t* frame, uint16_t len,
   if (!wifi_parse_ssid(frame + WIFI_MGMT_HDR_LEN, (int)len - WIFI_MGMT_HDR_LEN,
                        ssid, fixed_len))
     return;
-  if (ssid[0] == '\0') return;  // wildcard/broadcast probe
-  const SsidKeyword* k = ssid_keyword_match(ssid);
-  if (!k) return;
+  if (ssid[0] == '\0') return;      // wildcard/broadcast probe
   if (surv_ignore_ssid(ssid)) return;
   char m2[18];
   wifi_mac_to_str(a2, m2);
   if (surv_ignore_mac(m2)) return;
-  WifiSeen* s = wifi_seen_get(a2);
-  if (s && !(s->flags & SEEN_SSID)) {
-    s->flags |= SEEN_SSID;
-    emit_wifi_ssid(a2, ssid, k, channel, rssi);
+
+  // Surveillance camera / recording keyword.
+  const SsidKeyword* k = ssid_keyword_match(ssid);
+  if (k) {
+    WifiSeen* s = wifi_seen_get(a2);
+    if (s && !(s->flags & SEEN_SSID)) {
+      s->flags |= SEEN_SSID;
+      emit_wifi_ssid(a2, ssid, k, channel, rssi);
+    }
   }
+
+  // Hacking / pentest device keyword (independent of the above).
+#if ENABLE_HACKING_DETECTION
+  const HackSsid* h = hacking_ssid_match(ssid);
+  if (h) {
+    WifiSeen* s = wifi_seen_get(a2);
+    if (s && !(s->flags & SEEN_HACK)) {
+      s->flags |= SEEN_HACK;
+      s_hacking_hits++;
+      emit_hacking_wifi(a2, ssid, h, channel, rssi);
+    }
+  }
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -165,6 +197,7 @@ void surveillance_ble_adv(const char* mac, int8_t rssi,
   const char* vendor = nullptr;
   const char* category = nullptr;
   const char* sig = nullptr;
+  char name[32] = {0};  // advertised local name, if any
 
   int i = 0;
   while (i + 1 < len) {
@@ -188,9 +221,35 @@ void surveillance_ble_adv(const char* mac, int8_t rssi,
       uint16_t u = (uint16_t)d[0] | ((uint16_t)d[1] << 8);
       if (u == 0xFD5A)                      { vendor = "Samsung"; category = "tracker"; sig = "smarttag"; }
       else if (u == 0xFEED || u == 0xFEEC)  { vendor = "Tile";    category = "tracker"; sig = "tile"; }
+    } else if (ad_type == 0x08 || ad_type == 0x09) {    // shortened/complete local name
+      int n = dlen; if (n > 31) n = 31;
+      for (int j = 0; j < n; j++) {
+        uint8_t c = d[j];  // keep printable so it can't corrupt the JSON
+        name[j] = (c >= 0x20 && c < 0x7F && c != '"' && c != '\\') ? c : '?';
+      }
+      name[n] = '\0';
     }
     i += 1 + ad_len;
   }
+
+  // Hacking device by BLE name (e.g. Flipper Zero) takes priority over tracker.
+#if ENABLE_HACKING_DETECTION
+  if (name[0]) {
+    const HackName* h = hacking_ble_name_match(name);
+    if (h) {
+      if (surv_ignore_mac(mac)) return;
+      if (ble_already_alerted(mac)) return;
+      s_hacking_hits++;
+      char hb[288];
+      snprintf(hb, sizeof(hb),
+        "{\"sensor\":\"%s\",\"ts\":%lu,\"type\":\"hacking_device\",\"radio\":\"ble\","
+        "\"tool\":\"%s\",\"name\":\"%s\",\"mac\":\"%s\",\"rssi\":%d}",
+        SENSOR_ID, (unsigned long)millis(), h->tool, name, mac, rssi);
+      alert_event(hb);
+      return;
+    }
+  }
+#endif
 
   if (!sig) return;
   if (surv_ignore_mac(mac)) return;
@@ -204,5 +263,7 @@ void surveillance_ble_adv(const char* mac, int8_t rssi,
     SENSOR_ID, (unsigned long)millis(), category, vendor, sig, mac, rssi);
   alert_event(buf);
 }
+
+uint32_t surveillance_hacking_hits() { return s_hacking_hits; }
 
 uint32_t surveillance_ble_hits() { return s_ble_hits; }

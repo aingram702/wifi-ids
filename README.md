@@ -15,6 +15,9 @@ channels, and raises alerts for:
   Hikvision, Dahua, Axis, Ubiquiti…) matched by vendor OUI and SSID keywords,
   **plus Bluetooth trackers** (Apple Find My / AirTag, Tile, Samsung SmartTag)
   via a built-in BLE scanner.
+- **Hacking / pentest devices** — Hak5 gear (WiFi Pineapple, O.MG, Key Croc…),
+  Flipper Zero, Pwnagotchi, ESP32 Marauder, and WiFi Deauthers, matched by the
+  telltale SSIDs and BLE names they broadcast.
 
 Alerts come out as one-line JSON over USB serial and blink the onboard LED.
 Because the whole thing is a ~$7 board, you can flash several and scatter them
@@ -59,6 +62,7 @@ that actually matter for detection.
 | `evil_twin` | A beacon/probe-response advertises a trusted SSID from a BSSID that isn't in that SSID's allow-list. Fires once per offending BSSID. |
 | `unknown_ssid` | (Opt-in) Any SSID not in `kTrustedAps`. Off by default — noisy near neighbours. |
 | `surveillance_device` | A management-frame MAC matches a surveillance-vendor OUI, an SSID matches a device keyword, or a BLE advertisement matches a known tracker. Fires once per device. |
+| `hacking_device` | An SSID or BLE name matches a known hacking/pentest tool (Hak5, Flipper Zero, Pwnagotchi, Marauder, Deauther…). Fires once per device. |
 | `heartbeat` | Emitted every `HEARTBEAT_MS`; counters for liveness / tuning. |
 
 ### Surveillance & tracker detection
@@ -103,6 +107,31 @@ suppressed on both radios.
 > Safety** cameras are LTE-first and don't reliably beacon on Wi-Fi; the SSID
 > keyword catches their provisioning/probe traffic when present, and you can add
 > a confirmed OUI to the table as the community documents them.
+
+### Hacking / pentest device detection
+
+The sensor also flags common attack tools when they show themselves on the air:
+
+| Tool | How it's caught |
+|------|-----------------|
+| **Flipper Zero** | BLE advertises a `Flipper <name>` local name |
+| **Hak5 WiFi Pineapple** | management SSID contains `pineapple` |
+| **Hak5 O.MG cable/plug** | AP SSID contains `o.mg` / `omg-` |
+| **Hak5 Key Croc / Bash Bunny / LAN Turtle / Shark Jack / Packet Squirrel** | setup-AP SSID contains the product name |
+| **Pwnagotchi** | beacon SSID contains `pwnagotchi` |
+| **ESP8266 WiFi Deauther** | default AP `pwned`, or SSID contains `deauther` |
+| **ESP32 Marauder** | AP SSID contains `marauder` |
+| **Evil Portal (Flipper/Marauder captive portal)** | SSID contains `evilportal` |
+
+These tools all use commodity radios (ESP32/Atheros/nRF), so there's no reliable
+vendor OUI to match on — a Raspberry Pi or ESP32 OUI would flag every hobby
+board. Detection is therefore by the **names they broadcast** (default AP SSIDs
+and BLE local names), which is why a renamed device can slip past: the signatures
+in [`src/signatures.h`](src/signatures.h) (`kHackingSsids`, `kHackingBleNames`)
+are meant to be extended. A live deauth attack is still caught regardless of the
+tool's name by the `deauth_flood` detector. Toggle the whole feature with
+`ENABLE_HACKING_DETECTION` in `config.h`; your own devices can be suppressed via
+the same ignore list as surveillance gear.
 
 ---
 
@@ -209,6 +238,8 @@ Example output:
 [13:37:09] xiao-sensor-02   EVIL TWIN     ssid='MyHomeWiFi'  rogue=12:34:56:78:9a:bc expected=aa:bb:cc:dd:ee:ff  ch11 rssi=-58
 [13:37:12] xiao-sensor-01   SURVEILLANCE  [wifi] Hikvision (camera) 'oui' mac=44:19:b6:12:34:56 rssi=-63 ch1
 [13:37:18] xiao-sensor-02   SURVEILLANCE  [ble] Apple (tracker) 'find-my (airtag/offline)' mac=4d:2a:... rssi=-55
+[13:37:24] xiao-sensor-01   HACKING TOOL  [wifi] WiFi Pineapple 'Pineapple_5G' mac=00:13:37:aa:bb:cc rssi=-48 ch6
+[13:37:29] xiao-sensor-03   HACKING TOOL  [ble] Flipper Zero 'Flipper Roland' mac=b4:eb:89:... rssi=-61
 ```
 
 Because the wire format is just JSON lines, you can skip the collector entirely
@@ -257,7 +288,7 @@ src/
   sniffer.{h,cpp}   Promiscuous mode + channel hopping
   detector.{h,cpp}  Deauth-flood + evil-twin/rogue-AP detection
   surveillance.{h,cpp}  Camera (OUI/SSID) + BLE tracker detection
-  signatures.h      ← editable OUI table, SSID keywords, tracker signatures
+  signatures.h      ← editable OUI table, SSID keywords, tracker + hacking-tool signatures
   ble.{h,cpp}       NimBLE scanner (feeds the surveillance detector)
   ieee80211.h       802.11 management-frame parsing helpers
   alert.{h,cpp}     JSON-over-serial + LED alert sink

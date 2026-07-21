@@ -36,6 +36,7 @@ _COLORS = {
     "evil_twin":           "\033[1;35m",   # bright magenta
     "unknown_ssid":        "\033[1;33m",   # yellow
     "surveillance_device": "\033[1;34m",   # bright blue
+    "hacking_device":      "\033[1;91m",   # bold red-orange
     "heartbeat":           "\033[2;37m",   # dim
     "boot":                "\033[1;36m",   # cyan
 }
@@ -97,11 +98,18 @@ def format_line(obj: dict) -> str:
         body = (f"SURVEILLANCE  [{radio}] {vendor} ({cat}) "
                 f"{detail!r} mac={obj.get('mac')} rssi={obj.get('rssi')}"
                 + (f" ch{obj.get('channel')}" if obj.get("channel") else ""))
+    elif kind == "hacking_device":
+        radio = obj.get("radio", "?")
+        detail = obj.get("ssid") or obj.get("name") or ""
+        body = (f"HACKING TOOL  [{radio}] {obj.get('tool', '?')} "
+                f"{detail!r} mac={obj.get('mac')} rssi={obj.get('rssi')}"
+                + (f" ch{obj.get('channel')}" if obj.get("channel") else ""))
     elif kind == "heartbeat":
         body = (f"heartbeat     ch{obj.get('channel')}  "
                 f"mgmt={obj.get('mgmt_frames')} beacons={obj.get('beacons')} "
                 f"deauths={obj.get('deauths')} aps={obj.get('aps_seen')} "
                 f"trackers={obj.get('ble_trackers', 0)} "
+                f"hacking={obj.get('hacking', 0)} "
                 f"alerts={obj.get('alerts')}")
     elif kind == "boot":
         body = f"BOOT          {obj.get('msg', '')}"

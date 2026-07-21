@@ -181,9 +181,10 @@ void detector_heartbeat_json(char* buf, size_t buf_len, uint8_t channel) {
   snprintf(buf, buf_len,
     "{\"sensor\":\"%s\",\"ts\":%lu,\"type\":\"heartbeat\",\"channel\":%u,"
     "\"mgmt_frames\":%lu,\"beacons\":%lu,\"deauths\":%lu,\"aps_seen\":%d,"
-    "\"ble_trackers\":%lu,\"alerts\":%lu}",
+    "\"ble_trackers\":%lu,\"hacking\":%lu,\"alerts\":%lu}",
     SENSOR_ID, (unsigned long)millis(), channel,
     (unsigned long)s_frames, (unsigned long)s_beacons,
     (unsigned long)s_deauths, ap_count,
-    (unsigned long)surveillance_ble_hits(), (unsigned long)s_alerts);
+    (unsigned long)surveillance_ble_hits(),
+    (unsigned long)surveillance_hacking_hits(), (unsigned long)s_alerts);
 }

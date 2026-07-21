@@ -73,6 +73,11 @@ static const TrustedAp kTrustedAps[] = {
 // Wi-Fi-only build that doesn't need NimBLE.
 #define ENABLE_BLE_SCAN 1
 
+// Hacking / pentest device detection: flag gear like the Hak5 WiFi Pineapple,
+// O.MG cables, Flipper Zero, Pwnagotchi, ESP32 Marauder, and WiFi Deauthers by
+// the telltale SSIDs (Wi-Fi) and BLE names they broadcast (see signatures.h).
+#define ENABLE_HACKING_DETECTION 1
+
 // BLE scan timing in 0.625 ms units. Window <= Interval; here ~50% duty so the
 // shared radio still has time for Wi-Fi. (80 * 0.625 = 50 ms.)
 #define BLE_SCAN_INTERVAL 160

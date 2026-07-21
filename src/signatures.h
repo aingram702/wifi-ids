@@ -182,21 +182,69 @@ static inline const OuiEntry* oui_lookup(const uint8_t* mac) {
   return nullptr;
 }
 
-// Case-insensitive substring search (strcasestr isn't portable across cores).
-static inline const SsidKeyword* ssid_keyword_match(const char* ssid) {
-  for (unsigned i = 0; i < sizeof(kSsidKeywords) / sizeof(kSsidKeywords[0]); i++) {
-    const char* needle = kSsidKeywords[i].kw;
-    for (const char* h = ssid; *h; h++) {
-      const char* a = h;
-      const char* b = needle;
-      while (*a && *b) {
-        char ca = (*a >= 'A' && *a <= 'Z') ? *a + 32 : *a;
-        char cb = (*b >= 'A' && *b <= 'Z') ? *b + 32 : *b;
-        if (ca != cb) break;
-        a++; b++;
-      }
-      if (!*b) return &kSsidKeywords[i];  // reached end of needle -> matched
+// Case-insensitive substring test (strcasestr isn't portable across cores).
+static inline bool ci_contains(const char* hay, const char* needle) {
+  for (const char* h = hay; *h; h++) {
+    const char* a = h;
+    const char* b = needle;
+    while (*a && *b) {
+      char ca = (*a >= 'A' && *a <= 'Z') ? *a + 32 : *a;
+      char cb = (*b >= 'A' && *b <= 'Z') ? *b + 32 : *b;
+      if (ca != cb) break;
+      a++; b++;
     }
+    if (!*b) return true;  // reached end of needle -> matched
   }
+  return false;
+}
+
+static inline const SsidKeyword* ssid_keyword_match(const char* ssid) {
+  for (unsigned i = 0; i < sizeof(kSsidKeywords) / sizeof(kSsidKeywords[0]); i++)
+    if (ci_contains(ssid, kSsidKeywords[i].kw)) return &kSsidKeywords[i];
+  return nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// Hacking / pentest device fingerprints
+// ---------------------------------------------------------------------------
+// These use commodity radios (ESP32/Atheros/MediaTek/nRF), so there's no
+// reliable vendor OUI — a Raspberry Pi or ESP32 OUI would flag every hobby
+// project. Detection is therefore by the telltale names they broadcast:
+// default AP SSIDs (Wi-Fi) and BLE local names. Extend freely.
+
+struct HackSsid { const char* kw; const char* tool; };
+static const HackSsid kHackingSsids[] = {
+  {"pineapple",     "WiFi Pineapple"},        // Hak5
+  {"wifipineapple", "WiFi Pineapple"},
+  {"hak5",          "Hak5 device"},
+  {"keycroc",       "Hak5 Key Croc"},
+  {"bashbunny",     "Hak5 Bash Bunny"},
+  {"lanturtle",     "Hak5 LAN Turtle"},
+  {"sharkjack",     "Hak5 Shark Jack"},
+  {"packetsquirrel","Hak5 Packet Squirrel"},
+  {"o.mg",          "O.MG device"},           // O.MG cable/plug
+  {"omg-",          "O.MG device"},
+  {"pwnagotchi",    "Pwnagotchi"},
+  {"pwned",         "WiFi Deauther"},          // ESP8266 Deauther default AP
+  {"deauther",      "WiFi Deauther"},          // full word — won't hit "deauthorized"
+  {"marauder",      "ESP32 Marauder"},
+  {"esp32marauder", "ESP32 Marauder"},
+  {"evilportal",    "Evil Portal"},            // Flipper/Marauder captive portal
+  {"flipper",       "Flipper Zero"},           // Flipper Wi-Fi devboard AP
+};
+
+struct HackName { const char* kw; const char* tool; };
+static const HackName kHackingBleNames[] = {
+  {"flipper",       "Flipper Zero"},           // BLE local name "Flipper <name>"
+};
+
+static inline const HackSsid* hacking_ssid_match(const char* ssid) {
+  for (unsigned i = 0; i < sizeof(kHackingSsids) / sizeof(kHackingSsids[0]); i++)
+    if (ci_contains(ssid, kHackingSsids[i].kw)) return &kHackingSsids[i];
+  return nullptr;
+}
+static inline const HackName* hacking_ble_name_match(const char* name) {
+  for (unsigned i = 0; i < sizeof(kHackingBleNames) / sizeof(kHackingBleNames[0]); i++)
+    if (ci_contains(name, kHackingBleNames[i].kw)) return &kHackingBleNames[i];
   return nullptr;
 }

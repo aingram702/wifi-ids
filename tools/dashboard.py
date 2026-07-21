@@ -234,8 +234,11 @@ def demo_reader(hub):
             ("Ubiquiti", "networking", "78:8a:20"), ("Nest", "camera", "18:b4:30")]
     trackers = [("Apple", "find-my (airtag/offline)"), ("Tile", "tile"),
                 ("Samsung", "smarttag")]
+    hack_wifi = [("WiFi Pineapple", "Pineapple_5G"), ("ESP32 Marauder", "marauder_ap"),
+                 ("WiFi Deauther", "pwned"), ("Pwnagotchi", "pwnagotchi-a1b2"),
+                 ("O.MG device", "O.MG-7f3c")]
     counters = {s: {"mgmt": 0, "beacons": 0, "deauths": 0, "aps": 0,
-                    "trk": 0, "alerts": 0} for s in sensors}
+                    "trk": 0, "hack": 0, "alerts": 0} for s in sensors}
     rnd = random.Random(1)
 
     def rmac(prefix=None):
@@ -279,6 +282,17 @@ def demo_reader(hub):
                          "ssid": "NETGEAR-" + str(rnd.randint(10, 99)),
                          "bssid": rmac(), "channel": rnd.choice([1, 6, 11]),
                          "rssi": -rnd.randint(50, 85)})
+        elif roll < 0.38:                                 # hacking device (wifi)
+            tool, ssid = rnd.choice(hack_wifi); c["hack"] += 1; c["alerts"] += 1
+            hub.publish({"sensor": s, "type": "hacking_device", "radio": "wifi",
+                         "match": "ssid", "tool": tool, "ssid": ssid, "mac": rmac(),
+                         "channel": rnd.choice([1, 6, 11]), "rssi": -rnd.randint(35, 75)})
+        elif roll < 0.41:                                 # hacking device (Flipper BLE)
+            c["hack"] += 1; c["alerts"] += 1
+            hub.publish({"sensor": s, "type": "hacking_device", "radio": "ble",
+                         "tool": "Flipper Zero", "name": "Flipper " +
+                         rnd.choice(["Zed", "Roland", "Kestrel"]), "mac": rmac(),
+                         "rssi": -rnd.randint(40, 80)})
         tick += 1
         if tick % 4 == 0:                                 # heartbeats
             for sid in sensors:
@@ -287,7 +301,8 @@ def demo_reader(hub):
                              "channel": rnd.choice(list(range(1, 12))),
                              "mgmt_frames": cc["mgmt"], "beacons": cc["beacons"],
                              "deauths": cc["deauths"], "aps_seen": cc["aps"],
-                             "ble_trackers": cc["trk"], "alerts": cc["alerts"]})
+                             "ble_trackers": cc["trk"], "hacking": cc["hack"],
+                             "alerts": cc["alerts"]})
         time.sleep(rnd.uniform(0.4, 1.3))
 
 

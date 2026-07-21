@@ -9,7 +9,7 @@
     --bg:#0b0e14; --panel:#131824; --panel-2:#1a2130; --line:#243044;
     --fg:#e6ebf2; --muted:#8b97a8; --dim:#5a6678;
     --red:#ff4d5e; --purple:#c46bff; --amber:#ffb020; --blue:#3aa0ff;
-    --green:#38d39f; --grayglow:#5a6678;
+    --green:#38d39f; --orange:#ff7a45; --grayglow:#5a6678;
     --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
     --sans:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
   }
@@ -33,7 +33,7 @@
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(56,211,159,.5)}
     70%{box-shadow:0 0 0 7px rgba(56,211,159,0)}100%{box-shadow:0 0 0 0 rgba(56,211,159,0)}}
 
-  .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;padding:16px 20px}
+  .stats{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;padding:16px 20px}
   .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;
     padding:14px 16px;position:relative;overflow:hidden}
   .stat::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent,var(--dim))}
@@ -41,7 +41,7 @@
   .stat .l{color:var(--muted);font-size:12px;margin-top:6px;text-transform:uppercase;letter-spacing:.6px}
   .stat.red{--accent:var(--red)} .stat.purple{--accent:var(--purple)}
   .stat.amber{--accent:var(--amber)} .stat.blue{--accent:var(--blue)}
-  .stat.green{--accent:var(--green)}
+  .stat.green{--accent:var(--green)} .stat.orange{--accent:var(--orange)}
 
   .grid{display:grid;grid-template-columns:1.5fr 1fr;gap:16px;padding:4px 20px 24px}
   .col{display:flex;flex-direction:column;gap:16px;min-width:0}
@@ -94,6 +94,7 @@
   .badge.surveillance{color:var(--purple);border-color:rgba(196,107,255,.4)}
   .badge.recording{color:var(--green);border-color:rgba(56,211,159,.4)}
   .badge.drone{color:var(--amber);border-color:rgba(255,176,32,.4)}
+  .badge.hacking{color:var(--orange);border-color:rgba(255,122,69,.5)}
   .badge.networking{color:var(--muted)}
   .badge.rogue{color:var(--purple);border-color:rgba(196,107,255,.4)}
 
@@ -127,6 +128,7 @@
     <div class="stat purple"><div class="n" id="s_evil">0</div><div class="l">Evil twins</div></div>
     <div class="stat blue"><div class="n" id="s_surv">0</div><div class="l">Surveillance</div></div>
     <div class="stat amber"><div class="n" id="s_track">0</div><div class="l">BLE trackers</div></div>
+    <div class="stat orange"><div class="n" id="s_hack">0</div><div class="l">Hacking tools</div></div>
   </section>
 
   <main class="grid">
@@ -166,10 +168,11 @@ const TYPES = {
   evil_twin:           {label:'Evil twin',      color:'var(--purple)', icon:'👿'},
   unknown_ssid:        {label:'Unknown SSID',   color:'var(--amber)',  icon:'❓'},
   surveillance_device: {label:'Surveillance',   color:'var(--blue)',   icon:'📷'},
+  hacking_device:      {label:'Hacking tool',   color:'var(--orange)', icon:'🛠️'},
   boot:                {label:'Boot',           color:'var(--green)',  icon:'⏻'},
   heartbeat:           {label:'Heartbeat',      color:'var(--grayglow)', icon:'♥'},
 };
-const ALERT_TYPES = ['deauth_flood','evil_twin','unknown_ssid','surveillance_device'];
+const ALERT_TYPES = ['deauth_flood','evil_twin','unknown_ssid','surveillance_device','hacking_device'];
 
 const state = { sensors:{}, devices:{}, counts:{}, lastSeq:0 };
 const shown = {};                       // active filter toggles
@@ -220,9 +223,13 @@ function detailText(ev){
       return `<b>${esc(ev.vendor)}</b> <span class="badge ${esc(ev.category)}">${esc(ev.category)}</span> `+
         `<span class="radio">${esc(ev.radio)}</span> · <span class="mono">${esc(ev.mac)}</span>`+
         (ev.ssid?` · ${esc(ev.ssid)}`:'')+(ev.signature?` · ${esc(ev.signature)}`:'');
+    case 'hacking_device':
+      return `<b>${esc(ev.tool)}</b> <span class="badge hacking">hacking</span> `+
+        `<span class="radio">${esc(ev.radio)}</span> · <span class="mono">${esc(ev.mac)}</span>`+
+        (ev.ssid?` · SSID ${esc(ev.ssid)}`:'')+(ev.name?` · name ${esc(ev.name)}`:'');
     case 'boot': return esc(ev.msg||'sensor online');
     case 'heartbeat': return `ch${ev.channel} · mgmt ${ev.mgmt_frames} · beacons ${ev.beacons} · `+
-      `deauths ${ev.deauths} · aps ${ev.aps_seen} · trackers ${ev.ble_trackers??0}`;
+      `deauths ${ev.deauths} · aps ${ev.aps_seen} · trackers ${ev.ble_trackers??0} · hacking ${ev.hacking??0}`;
     default: return esc(JSON.stringify(ev));
   }
 }
@@ -254,11 +261,12 @@ function applyEvent(ev, live){
       beacons:ev.beacons,deauths:ev.deauths,aps_seen:ev.aps_seen,ble_trackers:ev.ble_trackers,alerts:ev.alerts});
   }
   if(ALERT_TYPES.includes(ev.type)) state.counts[ev.type]=(state.counts[ev.type]||0)+ (live?1:0);
-  if(['surveillance_device','evil_twin','unknown_ssid'].includes(ev.type)){
+  if(['surveillance_device','hacking_device','evil_twin','unknown_ssid'].includes(ev.type)){
     const key=ev.mac||ev.bssid; if(key){
       const d=state.devices[key]||(state.devices[key]={key,first_seen:ev._rx,count:0});
       d.count++; d.last_seen=ev._rx; d.rssi=ev.rssi; d.sensor=ev.sensor;
       if(ev.type==='surveillance_device'){d.name=ev.vendor;d.category=ev.category;d.radio=ev.radio;d.ssid=ev.ssid;d.detail=ev.signature;}
+      else if(ev.type==='hacking_device'){d.name=ev.tool;d.category='hacking';d.radio=ev.radio;d.ssid=ev.ssid;d.detail=ev.name||'hacking tool';}
       else if(ev.type==='evil_twin'){d.name=ev.ssid;d.category='rogue';d.radio='wifi';d.detail='evil twin';}
       else {d.name=ev.ssid;d.category='rogue';d.radio='wifi';d.detail='unknown ssid';}
     }
@@ -275,6 +283,7 @@ function renderStats(){
   $('s_surv').textContent=state.counts.surveillance_device||0;
   const track=Object.values(state.devices).filter(d=>d.category==='tracker').length;
   $('s_track').textContent=track;
+  $('s_hack').textContent=state.counts.hacking_device||0;
 }
 function renderSensors(){
   const el=$('sensors'); const list=Object.values(state.sensors).sort((a,b)=>a.sensor.localeCompare(b.sensor));
