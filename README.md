@@ -18,7 +18,8 @@ channels, and raises alerts for:
 
 Alerts come out as one-line JSON over USB serial and blink the onboard LED.
 Because the whole thing is a ~$7 board, you can flash several and scatter them
-around a building as a **sensor grid**, all feeding one collector.
+around a building as a **sensor grid**, all feeding one collector — with a
+[live web dashboard](#web-dashboard) for viewing it.
 
 > ⚠️ **Use responsibly.** This is a passive listener — it never transmits,
 > deauths, or injects. Even so, monitoring Wi-Fi management frames may be
@@ -199,6 +200,29 @@ and pipe a port into anything — a log shipper, an MQTT bridge, `jq`, a SIEM.
 Each Raspberry Pi / mini-PC / spare laptop can host a handful of sensors over a
 USB hub, and the `sensor` field keeps every alert attributable.
 
+### Web dashboard
+
+For a live GUI, `tools/dashboard.py` ingests the same sensor JSON and serves a
+browser dashboard that updates in real time (over Server-Sent Events): a live
+alert feed, per-sensor status cards, alert counters, and a table of every
+detected surveillance device / rogue AP. It's **standard library only** (plus
+pyserial for live capture) — no web framework, no build step, works offline.
+
+```bash
+# live, from sensors
+python3 tools/dashboard.py /dev/ttyACM0 /dev/ttyACM1     # or --auto
+
+# no hardware yet? watch synthetic traffic to see the UI
+python3 tools/dashboard.py --demo
+
+# replay a captured log (e.g. from collector.py --log)
+python3 tools/dashboard.py --replay grid.ndjson
+```
+
+Then open **http://localhost:8080** (change with `--host` / `--port`). The
+console `collector.py` and the web `dashboard.py` read the same data — run
+either, or both, or point them at a shared `--log` file.
+
 ---
 
 ## Repo layout
@@ -216,7 +240,9 @@ src/
   ieee80211.h       802.11 management-frame parsing helpers
   alert.{h,cpp}     JSON-over-serial + LED alert sink
 tools/
-  collector.py      Host-side grid collector
+  collector.py      Host-side grid collector (console)
+  dashboard.py      Host-side web dashboard server (SSE, stdlib only)
+  dashboard.html    The dashboard UI (self-contained, no external assets)
 ```
 
 ---

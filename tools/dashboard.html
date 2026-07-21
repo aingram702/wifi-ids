@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wi-Fi IDS — Sensor Grid</title>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#131824; --panel-2:#1a2130; --line:#243044;
+    --fg:#e6ebf2; --muted:#8b97a8; --dim:#5a6678;
+    --red:#ff4d5e; --purple:#c46bff; --amber:#ffb020; --blue:#3aa0ff;
+    --green:#38d39f; --grayglow:#5a6678;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);
+    font-size:14px;line-height:1.4;-webkit-font-smoothing:antialiased}
+  a{color:var(--blue)}
+
+  .topbar{display:flex;align-items:center;justify-content:space-between;
+    padding:14px 20px;border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,#0e1420,#0b0e14);position:sticky;top:0;z-index:10}
+  .brand{font-weight:700;font-size:17px;letter-spacing:.2px;display:flex;gap:9px;align-items:center}
+  .brand span{color:var(--muted);font-weight:500}
+  .conn{font-family:var(--mono);font-size:12px;color:var(--muted);
+    display:flex;align-items:center;gap:7px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--dim);
+    box-shadow:0 0 0 0 rgba(56,211,159,.6)}
+  .conn.up .dot{background:var(--green);animation:pulse 2s infinite}
+  .conn.down .dot{background:var(--red)}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(56,211,159,.5)}
+    70%{box-shadow:0 0 0 7px rgba(56,211,159,0)}100%{box-shadow:0 0 0 0 rgba(56,211,159,0)}}
+
+  .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;padding:16px 20px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:14px 16px;position:relative;overflow:hidden}
+  .stat::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent,var(--dim))}
+  .stat .n{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
+  .stat .l{color:var(--muted);font-size:12px;margin-top:6px;text-transform:uppercase;letter-spacing:.6px}
+  .stat.red{--accent:var(--red)} .stat.purple{--accent:var(--purple)}
+  .stat.amber{--accent:var(--amber)} .stat.blue{--accent:var(--blue)}
+  .stat.green{--accent:var(--green)}
+
+  .grid{display:grid;grid-template-columns:1.5fr 1fr;gap:16px;padding:4px 20px 24px}
+  .col{display:flex;flex-direction:column;gap:16px;min-width:0}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    display:flex;flex-direction:column;min-width:0;overflow:hidden}
+  .panel-h{display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:12px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .panel-h h2{margin:0;font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted)}
+
+  .filters{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{font:500 11px var(--sans);color:var(--muted);background:var(--panel-2);
+    border:1px solid var(--line);border-radius:999px;padding:4px 10px;cursor:pointer;user-select:none}
+  .chip.off{opacity:.4}
+  .chip .cd{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle}
+
+  .feed-list{list-style:none;margin:0;padding:6px;overflow-y:auto;max-height:70vh}
+  .ev{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:baseline;
+    padding:9px 10px 9px 12px;border-radius:8px;position:relative;border-left:3px solid var(--accent,var(--dim))}
+  .ev:hover{background:var(--panel-2)}
+  .ev .t{font-family:var(--mono);font-size:11px;color:var(--dim);white-space:nowrap}
+  .ev .body{min-width:0}
+  .ev .title{font-weight:600}
+  .ev .title .sensor{color:var(--muted);font-weight:500;font-size:12px;margin-left:6px}
+  .ev .detail{color:var(--muted);font-size:12.5px;margin-top:2px;word-break:break-word}
+  .ev .rssi{font-family:var(--mono);font-size:11px;color:var(--dim);white-space:nowrap}
+  .mono{font-family:var(--mono)}
+  .ev.new{animation:flash .9s ease-out}
+  @keyframes flash{from{background:rgba(58,160,255,.14)}to{background:transparent}}
+  .empty{color:var(--dim);text-align:center;padding:26px;font-size:13px}
+
+  .sensors{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;padding:14px 16px}
+  .sensor{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:11px 12px}
+  .sensor .sh{display:flex;align-items:center;gap:7px;font-weight:600;margin-bottom:8px}
+  .sensor .sd{width:8px;height:8px;border-radius:50%;background:var(--green)}
+  .sensor.stale .sd{background:var(--amber)}
+  .sensor.dead .sd{background:var(--red)}
+  .sensor .kv{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:3px}
+  .sensor .kv b{color:var(--fg);font-family:var(--mono);font-weight:600}
+
+  .table-wrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  thead th{text-align:left;color:var(--dim);font-weight:600;text-transform:uppercase;
+    letter-spacing:.5px;font-size:10.5px;padding:9px 12px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel)}
+  tbody td{padding:8px 12px;border-bottom:1px solid var(--panel-2);white-space:nowrap}
+  tbody tr:hover{background:var(--panel-2)}
+  .badge{display:inline-block;font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:6px;
+    background:var(--panel-2);border:1px solid var(--line);color:var(--muted)}
+  .badge.camera{color:var(--blue);border-color:rgba(58,160,255,.4)}
+  .badge.tracker{color:var(--red);border-color:rgba(255,77,94,.4)}
+  .badge.surveillance{color:var(--purple);border-color:rgba(196,107,255,.4)}
+  .badge.networking{color:var(--muted)}
+  .badge.rogue{color:var(--purple);border-color:rgba(196,107,255,.4)}
+  .radio{font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase}
+  .ago{color:var(--dim);font-size:11px}
+  .cnt{font-family:var(--mono);color:var(--fg)}
+
+  @media(max-width:900px){
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .grid{grid-template-columns:1fr}
+    .feed-list{max-height:52vh}
+  }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">📡 Wi-Fi IDS <span>Sensor Grid</span></div>
+    <div class="conn down" id="conn"><span class="dot"></span><span id="connText">connecting…</span></div>
+  </header>
+
+  <section class="stats" id="stats">
+    <div class="stat green"><div class="n" id="s_sensors">0</div><div class="l">Sensors online</div></div>
+    <div class="stat red"><div class="n" id="s_deauth">0</div><div class="l">Deauth floods</div></div>
+    <div class="stat purple"><div class="n" id="s_evil">0</div><div class="l">Evil twins</div></div>
+    <div class="stat blue"><div class="n" id="s_surv">0</div><div class="l">Surveillance</div></div>
+    <div class="stat amber"><div class="n" id="s_track">0</div><div class="l">BLE trackers</div></div>
+  </section>
+
+  <main class="grid">
+    <section class="panel">
+      <div class="panel-h">
+        <h2>Live Alerts</h2>
+        <div class="filters" id="filters"></div>
+      </div>
+      <ul class="feed-list" id="feed"><li class="empty">Waiting for alerts…</li></ul>
+    </section>
+
+    <aside class="col">
+      <section class="panel">
+        <div class="panel-h"><h2>Sensors</h2></div>
+        <div class="sensors" id="sensors"><div class="empty">No sensors reporting yet</div></div>
+      </section>
+      <section class="panel">
+        <div class="panel-h"><h2>Detected Devices</h2></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Device</th><th>Type</th><th>Address</th><th>RSSI</th><th>Seen</th><th>Last</th></tr></thead>
+            <tbody id="devices"><tr><td colspan="6" class="empty">Nothing detected yet</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+<script>
+const TYPES = {
+  deauth_flood:        {label:'Deauth flood',  color:'var(--red)',    icon:'⚡'},
+  evil_twin:           {label:'Evil twin',      color:'var(--purple)', icon:'👿'},
+  unknown_ssid:        {label:'Unknown SSID',   color:'var(--amber)',  icon:'❓'},
+  surveillance_device: {label:'Surveillance',   color:'var(--blue)',   icon:'📷'},
+  boot:                {label:'Boot',           color:'var(--green)',  icon:'⏻'},
+  heartbeat:           {label:'Heartbeat',      color:'var(--grayglow)', icon:'♥'},
+};
+const ALERT_TYPES = ['deauth_flood','evil_twin','unknown_ssid','surveillance_device'];
+
+const state = { sensors:{}, devices:{}, counts:{}, lastSeq:0 };
+const shown = {};                       // active filter toggles
+ALERT_TYPES.forEach(t => shown[t]=true);
+shown['heartbeat']=false; shown['boot']=true;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const now = () => Date.now();
+function ago(ms){ if(ms==null) return '—'; const s=Math.max(0,(now()-ms)/1000);
+  if(s<60) return Math.floor(s)+'s'; if(s<3600) return Math.floor(s/60)+'m'; return Math.floor(s/3600)+'h'; }
+
+// ---- filter chips ----
+function buildFilters(){
+  const f=$('filters'); f.innerHTML='';
+  [...ALERT_TYPES,'heartbeat'].forEach(t=>{
+    const m=TYPES[t]; const c=document.createElement('span');
+    c.className='chip'+(shown[t]?'':' off');
+    c.innerHTML=`<span class="cd" style="background:${m.color}"></span>${esc(m.label)}`;
+    c.onclick=()=>{ shown[t]=!shown[t]; c.classList.toggle('off',!shown[t]); reflowFeed(); };
+    f.appendChild(c);
+  });
+}
+
+// ---- feed ----
+const feedBuffer = [];                  // most recent first, capped
+function feedRow(ev){
+  const m=TYPES[ev.type]||TYPES.heartbeat;
+  const li=document.createElement('li');
+  li.className='ev'; li.style.setProperty('--accent',m.color);
+  li.dataset.type=ev.type;
+  const t=new Date((ev._rx)||now()).toLocaleTimeString();
+  li.innerHTML=`<span class="t">${t}</span>
+    <span class="body"><span class="title">${m.icon} ${esc(m.label)}
+      <span class="sensor">${esc(ev.sensor||'?')}</span></span>
+      <span class="detail">${detailText(ev)}</span></span>
+    <span class="rssi">${ev.rssi!=null?ev.rssi+' dBm':''}</span>`;
+  return li;
+}
+function detailText(ev){
+  switch(ev.type){
+    case 'deauth_flood': return `${ev.count} ${esc(ev.frame)} frames/${ev.window_ms}ms · ch${ev.channel} · `+
+      `src <span class="mono">${esc(ev.src)}</span> → bssid <span class="mono">${esc(ev.bssid)}</span>`;
+    case 'evil_twin': return `SSID <b>${esc(ev.ssid)}</b> from rogue <span class="mono">${esc(ev.bssid)}</span> `+
+      `(expected <span class="mono">${esc(ev.expected_bssid)}</span>) · ch${ev.channel}`;
+    case 'unknown_ssid': return `SSID <b>${esc(ev.ssid)}</b> · <span class="mono">${esc(ev.bssid)}</span> · ch${ev.channel}`;
+    case 'surveillance_device':
+      return `<b>${esc(ev.vendor)}</b> <span class="badge ${esc(ev.category)}">${esc(ev.category)}</span> `+
+        `<span class="radio">${esc(ev.radio)}</span> · <span class="mono">${esc(ev.mac)}</span>`+
+        (ev.ssid?` · ${esc(ev.ssid)}`:'')+(ev.signature?` · ${esc(ev.signature)}`:'');
+    case 'boot': return esc(ev.msg||'sensor online');
+    case 'heartbeat': return `ch${ev.channel} · mgmt ${ev.mgmt_frames} · beacons ${ev.beacons} · `+
+      `deauths ${ev.deauths} · aps ${ev.aps_seen} · trackers ${ev.ble_trackers??0}`;
+    default: return esc(JSON.stringify(ev));
+  }
+}
+function reflowFeed(){
+  const feed=$('feed'); feed.innerHTML='';
+  const vis=feedBuffer.filter(e=>shown[e.type]!==false);
+  if(!vis.length){ feed.innerHTML='<li class="empty">No alerts match the current filters</li>'; return; }
+  vis.slice(0,200).forEach(e=>feed.appendChild(feedRow(e)));
+}
+function pushFeed(ev, live){
+  ev._rx = ev._rx || now();
+  feedBuffer.unshift(ev);
+  if(feedBuffer.length>400) feedBuffer.pop();
+  if(shown[ev.type]===false) return;
+  const feed=$('feed');
+  const emptyEl=feed.querySelector('.empty'); if(emptyEl) feed.innerHTML='';
+  const row=feedRow(ev); if(live) row.classList.add('new');
+  feed.insertBefore(row, feed.firstChild);
+  while(feed.children.length>200) feed.removeChild(feed.lastChild);
+}
+
+// ---- reducers ----
+function applyEvent(ev, live){
+  ev._rx = ev._rx || now();
+  if(ev.sensor){
+    const s=state.sensors[ev.sensor]||(state.sensors[ev.sensor]={sensor:ev.sensor});
+    s.last_seen=ev._rx;
+    if(ev.type==='heartbeat') Object.assign(s,{channel:ev.channel,mgmt_frames:ev.mgmt_frames,
+      beacons:ev.beacons,deauths:ev.deauths,aps_seen:ev.aps_seen,ble_trackers:ev.ble_trackers,alerts:ev.alerts});
+  }
+  if(ALERT_TYPES.includes(ev.type)) state.counts[ev.type]=(state.counts[ev.type]||0)+ (live?1:0);
+  if(['surveillance_device','evil_twin','unknown_ssid'].includes(ev.type)){
+    const key=ev.mac||ev.bssid; if(key){
+      const d=state.devices[key]||(state.devices[key]={key,first_seen:ev._rx,count:0});
+      d.count++; d.last_seen=ev._rx; d.rssi=ev.rssi; d.sensor=ev.sensor;
+      if(ev.type==='surveillance_device'){d.name=ev.vendor;d.category=ev.category;d.radio=ev.radio;d.ssid=ev.ssid;d.detail=ev.signature;}
+      else if(ev.type==='evil_twin'){d.name=ev.ssid;d.category='rogue';d.radio='wifi';d.detail='evil twin';}
+      else {d.name=ev.ssid;d.category='rogue';d.radio='wifi';d.detail='unknown ssid';}
+    }
+  }
+  pushFeed(ev, live);
+}
+
+// ---- render ----
+function renderStats(){
+  const online=Object.values(state.sensors).filter(s=>now()-(s.last_seen||0)<45000).length;
+  $('s_sensors').textContent=online;
+  $('s_deauth').textContent=state.counts.deauth_flood||0;
+  $('s_evil').textContent=state.counts.evil_twin||0;
+  $('s_surv').textContent=state.counts.surveillance_device||0;
+  const track=Object.values(state.devices).filter(d=>d.category==='tracker').length;
+  $('s_track').textContent=track;
+}
+function renderSensors(){
+  const el=$('sensors'); const list=Object.values(state.sensors).sort((a,b)=>a.sensor.localeCompare(b.sensor));
+  if(!list.length){el.innerHTML='<div class="empty">No sensors reporting yet</div>';return;}
+  el.innerHTML='';
+  list.forEach(s=>{
+    const dt=now()-(s.last_seen||0);
+    const cls=dt<45000?'':(dt<120000?'stale':'dead');
+    const d=document.createElement('div'); d.className='sensor '+cls;
+    d.innerHTML=`<div class="sh"><span class="sd"></span>${esc(s.sensor)}</div>
+      <div class="kv"><span>channel</span><b>${s.channel??'—'}</b></div>
+      <div class="kv"><span>beacons</span><b>${s.beacons??'—'}</b></div>
+      <div class="kv"><span>deauths</span><b>${s.deauths??'—'}</b></div>
+      <div class="kv"><span>trackers</span><b>${s.ble_trackers??'—'}</b></div>
+      <div class="kv"><span>last seen</span><b>${ago(s.last_seen)}</b></div>`;
+    el.appendChild(d);
+  });
+}
+function renderDevices(){
+  const el=$('devices'); const list=Object.values(state.devices).sort((a,b)=>b.last_seen-a.last_seen);
+  if(!list.length){el.innerHTML='<tr><td colspan="6" class="empty">Nothing detected yet</td></tr>';return;}
+  el.innerHTML='';
+  list.slice(0,120).forEach(d=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${esc(d.name||'?')}${d.detail?` <span class="ago">${esc(d.detail)}</span>`:''}</td>
+      <td><span class="badge ${esc(d.category||'')}">${esc(d.category||'?')}</span> <span class="radio">${esc(d.radio||'')}</span></td>
+      <td class="mono">${esc(d.key)}</td>
+      <td class="mono">${d.rssi!=null?d.rssi:'—'}</td>
+      <td class="cnt">${d.count}</td>
+      <td class="ago">${ago(d.last_seen)}</td>`;
+    el.appendChild(tr);
+  });
+}
+function renderAll(){ renderStats(); renderSensors(); renderDevices(); }
+
+// ---- transport ----
+function setConn(up){
+  const c=$('conn'); c.className='conn '+(up?'up':'down');
+  $('connText').textContent=up?'live':'reconnecting…';
+}
+async function loadSnapshot(){
+  try{
+    const r=await fetch('/api/state'); const st=await r.json();
+    state.sensors=st.sensors||{}; state.counts=st.counts||{}; state.lastSeq=st.last_seq||0;
+    state.devices={}; (st.devices||[]).forEach(d=>state.devices[d.key]=d);
+    (st.recent||[]).forEach(ev=>{ ev._rx=ev._rx||(ev.rx_time?ev.rx_time*1000:now()); feedBuffer.unshift(ev); });
+    feedBuffer.reverse();               // recent came oldest-first; feed wants newest-first
+    reflowFeed(); renderAll();
+  }catch(e){ /* server may still be starting */ }
+}
+function connect(){
+  const es=new EventSource('/events');
+  es.onopen=()=>setConn(true);
+  es.onerror=()=>{ setConn(false); };   // EventSource auto-reconnects
+  es.onmessage=e=>{
+    let ev; try{ev=JSON.parse(e.data);}catch{return;}
+    if(ev._seq && ev._seq<=state.lastSeq) return;   // already have it from snapshot
+    if(ev._seq) state.lastSeq=ev._seq;
+    applyEvent(ev,true); renderAll();
+  };
+}
+buildFilters();
+loadSnapshot().then(connect);
+setInterval(()=>{ renderStats(); renderSensors(); renderDevices(); },5000); // refresh "ago" timers
+</script>
+</body>
+</html>
