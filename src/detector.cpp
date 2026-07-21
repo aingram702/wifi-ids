@@ -2,6 +2,7 @@
 #include "alert.h"
 #include "config.h"
 #include "ieee80211.h"
+#include "surveillance.h"
 
 #include <Arduino.h>
 #include <string.h>
@@ -154,6 +155,11 @@ void detector_handle(const uint8_t* frame, uint16_t len, int8_t rssi, uint8_t ch
   s_frames++;
 
   uint8_t subtype = wifi_frame_subtype(frame);
+
+#if ENABLE_SURVEILLANCE_WIFI
+  surveillance_wifi_frame(frame, len, subtype, rssi, channel);
+#endif
+
   switch (subtype) {
     case WIFI_SUBTYPE_DEAUTH:
     case WIFI_SUBTYPE_DISASSOC:
@@ -174,8 +180,10 @@ void detector_heartbeat_json(char* buf, size_t buf_len, uint8_t channel) {
   for (int i = 0; i < MAX_APS; i++) if (s_aps[i].used) ap_count++;
   snprintf(buf, buf_len,
     "{\"sensor\":\"%s\",\"ts\":%lu,\"type\":\"heartbeat\",\"channel\":%u,"
-    "\"mgmt_frames\":%lu,\"beacons\":%lu,\"deauths\":%lu,\"aps_seen\":%d,\"alerts\":%lu}",
+    "\"mgmt_frames\":%lu,\"beacons\":%lu,\"deauths\":%lu,\"aps_seen\":%d,"
+    "\"ble_trackers\":%lu,\"alerts\":%lu}",
     SENSOR_ID, (unsigned long)millis(), channel,
     (unsigned long)s_frames, (unsigned long)s_beacons,
-    (unsigned long)s_deauths, ap_count, (unsigned long)s_alerts);
+    (unsigned long)s_deauths, ap_count,
+    (unsigned long)surveillance_ble_hits(), (unsigned long)s_alerts);
 }

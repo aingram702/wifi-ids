@@ -39,14 +39,17 @@ static inline void wifi_mac_to_str(const uint8_t* mac, char* out) {
   }
 }
 
-// Extract the SSID from a beacon/probe-response body into a NUL-terminated
-// string (up to 32 chars + NUL, so ssid_out must hold 33 bytes). `body` points
-// just past the 24-byte MAC header; `body_len` is what remains of the frame.
+// Extract the SSID from a management-frame body into a NUL-terminated string
+// (up to 32 chars + NUL, so ssid_out must hold 33 bytes). `body` points just
+// past the 24-byte MAC header; `body_len` is what remains of the frame.
 //
-// Body layout: timestamp(8) interval(2) capability(2) then tagged parameters
-// as (tag, len, value...). The SSID is tag 0. Returns true on success.
-static inline bool wifi_parse_ssid(const uint8_t* body, int body_len, char* ssid_out) {
-  int pos = 12;  // skip the 12 bytes of fixed parameters
+// Beacon/probe-response bodies start with 12 bytes of fixed parameters
+// (timestamp(8) interval(2) capability(2)) before the tagged parameters, so
+// fixed_len is 12. Probe *requests* have no fixed parameters — pass 0. The
+// SSID is tag 0. Returns true on success.
+static inline bool wifi_parse_ssid(const uint8_t* body, int body_len, char* ssid_out,
+                                   int fixed_len = 12) {
+  int pos = fixed_len;  // skip fixed parameters, if any
   while (pos + 2 <= body_len) {
     uint8_t tag = body[pos];
     uint8_t len = body[pos + 1];

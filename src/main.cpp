@@ -14,6 +14,8 @@
 #include "alert.h"
 #include "detector.h"
 #include "sniffer.h"
+#include "surveillance.h"
+#include "ble.h"
 
 static uint32_t s_last_heartbeat = 0;
 
@@ -23,7 +25,9 @@ void setup() {
 
   alert_init();
   detector_init();
+  surveillance_init();
   sniffer_start();
+  ble_start();  // no-op unless ENABLE_BLE_SCAN
 
   Serial.println();
   Serial.print("{\"sensor\":\"");
@@ -35,6 +39,7 @@ void setup() {
 
 void loop() {
   sniffer_service();  // channel hopping
+  ble_service();      // keep the BLE scan alive (no-op unless enabled)
   alert_service();    // LED blink housekeeping
 
   uint32_t now = millis();

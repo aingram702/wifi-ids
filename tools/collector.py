@@ -32,11 +32,12 @@ except ImportError:
 
 # ANSI colors (skipped automatically when not a TTY)
 _COLORS = {
-    "deauth_flood": "\033[1;31m",   # bright red
-    "evil_twin":    "\033[1;35m",   # bright magenta
-    "unknown_ssid": "\033[1;33m",   # yellow
-    "heartbeat":    "\033[2;37m",   # dim
-    "boot":         "\033[1;36m",   # cyan
+    "deauth_flood":        "\033[1;31m",   # bright red
+    "evil_twin":           "\033[1;35m",   # bright magenta
+    "unknown_ssid":        "\033[1;33m",   # yellow
+    "surveillance_device": "\033[1;34m",   # bright blue
+    "heartbeat":           "\033[2;37m",   # dim
+    "boot":                "\033[1;36m",   # cyan
 }
 _RESET = "\033[0m"
 _USE_COLOR = sys.stdout.isatty()
@@ -88,10 +89,19 @@ def format_line(obj: dict) -> str:
     elif kind == "unknown_ssid":
         body = (f"UNKNOWN SSID  ssid={obj.get('ssid')!r} bssid={obj.get('bssid')} "
                 f"ch{obj.get('channel')} rssi={obj.get('rssi')}")
+    elif kind == "surveillance_device":
+        radio = obj.get("radio", "?")
+        vendor = obj.get("vendor", "?")
+        cat = obj.get("category", "?")
+        detail = obj.get("signature") or obj.get("ssid") or obj.get("match", "")
+        body = (f"SURVEILLANCE  [{radio}] {vendor} ({cat}) "
+                f"{detail!r} mac={obj.get('mac')} rssi={obj.get('rssi')}"
+                + (f" ch{obj.get('channel')}" if obj.get("channel") else ""))
     elif kind == "heartbeat":
         body = (f"heartbeat     ch{obj.get('channel')}  "
                 f"mgmt={obj.get('mgmt_frames')} beacons={obj.get('beacons')} "
                 f"deauths={obj.get('deauths')} aps={obj.get('aps_seen')} "
+                f"trackers={obj.get('ble_trackers', 0)} "
                 f"alerts={obj.get('alerts')}")
     elif kind == "boot":
         body = f"BOOT          {obj.get('msg', '')}"

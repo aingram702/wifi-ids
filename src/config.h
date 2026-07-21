@@ -60,6 +60,25 @@ static const TrustedAp kTrustedAps[] = {
 #define ALERT_UNKNOWN_SSID 0
 
 // ---------------------------------------------------------------------------
+// Surveillance-device detection (cameras, trackers, spy gadgets)
+// ---------------------------------------------------------------------------
+// Wi-Fi side: match management-frame MACs against a vendor OUI table and SSIDs
+// against a keyword list (see signatures.h — edit that file to add vendors,
+// e.g. confirmed Flock/Axon OUIs). Fires once per device.
+#define ENABLE_SURVEILLANCE_WIFI 1
+
+// BLE side: scan for Bluetooth trackers (Apple Find My / AirTag, Tile, Samsung
+// SmartTag). Uses the ESP32-S3's Bluetooth radio alongside Wi-Fi. Requires the
+// NimBLE-Arduino library (auto-installed by PlatformIO). Set to 0 for a
+// Wi-Fi-only build that doesn't need NimBLE.
+#define ENABLE_BLE_SCAN 1
+
+// BLE scan timing in 0.625 ms units. Window <= Interval; here ~50% duty so the
+// shared radio still has time for Wi-Fi. (80 * 0.625 = 50 ms.)
+#define BLE_SCAN_INTERVAL 160
+#define BLE_SCAN_WINDOW   80
+
+// ---------------------------------------------------------------------------
 // Alerting
 // ---------------------------------------------------------------------------
 #define ALERT_LED_ENABLED  1     // blink the onboard LED on every alert
