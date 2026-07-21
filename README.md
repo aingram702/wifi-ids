@@ -29,6 +29,9 @@ around a building as a **sensor grid**, all feeding one collector — with a
 > regulated where you live. Only run it on networks and premises you own or are
 > authorised to monitor.
 
+![Browser Version](/content/dash.png)
+![Mobile Version](/content/dashmobile.png)
+
 ---
 
 ## How it works
