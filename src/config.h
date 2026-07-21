@@ -78,6 +78,17 @@ static const TrustedAp kTrustedAps[] = {
 #define BLE_SCAN_INTERVAL 160
 #define BLE_SCAN_WINDOW   80
 
+// Ignore list: surveillance devices you own or expect, so the sensor doesn't
+// keep alerting on your own Ring/Nest/AirTag. MACs are matched case-
+// insensitively against the device address (Wi-Fi or BLE); SSIDs match exactly.
+static const char* kSurveillanceIgnoreMacs[] = {
+  // "aa:bb:cc:dd:ee:ff",   // my own Ring doorbell
+  // "11:22:33:44:55:66",   // my AirTag
+};
+static const char* kSurveillanceIgnoreSsids[] = {
+  // "MyReolinkCam",
+};
+
 // ---------------------------------------------------------------------------
 // Alerting
 // ---------------------------------------------------------------------------

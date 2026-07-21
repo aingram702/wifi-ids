@@ -92,8 +92,18 @@
   .badge.camera{color:var(--blue);border-color:rgba(58,160,255,.4)}
   .badge.tracker{color:var(--red);border-color:rgba(255,77,94,.4)}
   .badge.surveillance{color:var(--purple);border-color:rgba(196,107,255,.4)}
+  .badge.recording{color:var(--green);border-color:rgba(56,211,159,.4)}
+  .badge.drone{color:var(--amber);border-color:rgba(255,176,32,.4)}
   .badge.networking{color:var(--muted)}
   .badge.rogue{color:var(--purple);border-color:rgba(196,107,255,.4)}
+
+  .tools{display:flex;gap:8px;align-items:center}
+  .search{background:var(--panel-2);border:1px solid var(--line);color:var(--fg);
+    border-radius:7px;padding:5px 9px;font:12px var(--sans);width:120px;outline:none}
+  .search:focus{border-color:var(--blue)}
+  .btn{background:var(--panel-2);border:1px solid var(--line);color:var(--muted);
+    border-radius:7px;padding:5px 10px;font:600 11px var(--sans);cursor:pointer}
+  .btn:hover{color:var(--fg);border-color:var(--blue)}
   .radio{font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase}
   .ago{color:var(--dim);font-size:11px}
   .cnt{font-family:var(--mono);color:var(--fg)}
@@ -134,7 +144,12 @@
         <div class="sensors" id="sensors"><div class="empty">No sensors reporting yet</div></div>
       </section>
       <section class="panel">
-        <div class="panel-h"><h2>Detected Devices</h2></div>
+        <div class="panel-h"><h2>Detected Devices</h2>
+          <div class="tools">
+            <input id="devSearch" class="search" placeholder="filter…" autocomplete="off">
+            <button id="devExport" class="btn">Export CSV</button>
+          </div>
+        </div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Device</th><th>Type</th><th>Address</th><th>RSSI</th><th>Seen</th><th>Last</th></tr></thead>
@@ -278,11 +293,23 @@ function renderSensors(){
     el.appendChild(d);
   });
 }
+let devFilter='';
+function deviceList(){
+  let list=Object.values(state.devices).sort((a,b)=>b.last_seen-a.last_seen);
+  if(devFilter){
+    list=list.filter(d=>[d.name,d.category,d.radio,d.key,d.ssid,d.detail]
+      .some(v=>String(v||'').toLowerCase().includes(devFilter)));
+  }
+  return list;
+}
 function renderDevices(){
-  const el=$('devices'); const list=Object.values(state.devices).sort((a,b)=>b.last_seen-a.last_seen);
-  if(!list.length){el.innerHTML='<tr><td colspan="6" class="empty">Nothing detected yet</td></tr>';return;}
+  const el=$('devices'); const list=deviceList();
+  if(!list.length){
+    el.innerHTML=`<tr><td colspan="6" class="empty">${devFilter?'No devices match the filter':'Nothing detected yet'}</td></tr>`;
+    return;
+  }
   el.innerHTML='';
-  list.slice(0,120).forEach(d=>{
+  list.slice(0,200).forEach(d=>{
     const tr=document.createElement('tr');
     tr.innerHTML=`<td>${esc(d.name||'?')}${d.detail?` <span class="ago">${esc(d.detail)}</span>`:''}</td>
       <td><span class="badge ${esc(d.category||'')}">${esc(d.category||'?')}</span> <span class="radio">${esc(d.radio||'')}</span></td>
@@ -292,6 +319,18 @@ function renderDevices(){
       <td class="ago">${ago(d.last_seen)}</td>`;
     el.appendChild(tr);
   });
+}
+function exportCsv(){
+  const cols=['name','category','radio','address','rssi','count','first_seen','last_seen','sensor'];
+  const rows=[cols.join(',')];
+  const q=s=>`"${String(s??'').replace(/"/g,'""')}"`;
+  deviceList().forEach(d=>rows.push([q(d.name),q(d.category),q(d.radio),q(d.key),
+    d.rssi??'',d.count, new Date(d.first_seen).toISOString(),
+    new Date(d.last_seen).toISOString(), q(d.sensor)].join(',')));
+  const blob=new Blob([rows.join('\n')],{type:'text/csv'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='wifi-ids-devices-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.csv';
+  a.click(); URL.revokeObjectURL(a.href);
 }
 function renderAll(){ renderStats(); renderSensors(); renderDevices(); }
 
@@ -322,6 +361,8 @@ function connect(){
   };
 }
 buildFilters();
+$('devSearch').addEventListener('input', e=>{ devFilter=e.target.value.trim().toLowerCase(); renderDevices(); });
+$('devExport').addEventListener('click', exportCsv);
 loadSnapshot().then(connect);
 setInterval(()=>{ renderStats(); renderSensors(); renderDevices(); },5000); // refresh "ago" timers
 </script>

@@ -314,7 +314,10 @@ def main():
     ap.add_argument("--replay", help="replay an ndjson log instead of reading serial")
     ap.add_argument("--speed", type=float, default=1.0, help="replay speed multiplier")
     ap.add_argument("--demo", action="store_true", help="generate synthetic traffic")
-    ap.add_argument("--host", default="0.0.0.0")
+    ap.add_argument("--host", default="127.0.0.1",
+                    help="bind address (default localhost-only; use 0.0.0.0 to "
+                         "expose to the LAN — the dashboard has no auth, so only "
+                         "do that on a trusted network)")
     ap.add_argument("--port", type=int, default=8080)
     args = ap.parse_args()
 
@@ -341,8 +344,11 @@ def main():
                              args=(port, args.baud, hub, logfp), daemon=True).start()
 
     server = ThreadingHTTPServer((args.host, args.port), make_handler(hub))
-    shown = "localhost" if args.host in ("0.0.0.0", "") else args.host
+    shown = "localhost" if args.host in ("0.0.0.0", "", "127.0.0.1") else args.host
     print(f"[*] dashboard: http://{shown}:{args.port}   (Ctrl-C to quit)")
+    if args.host in ("0.0.0.0", ""):
+        print("[!] bound to all interfaces — dashboard has no auth; "
+              "make sure you trust this network")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

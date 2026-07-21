@@ -66,13 +66,21 @@ that actually matter for detection.
 The sensor also flags physical-surveillance and tracking gear — the stuff that
 watches *you* rather than attacks your network:
 
+Scope is deliberately limited to **surveillance and recording gear** — cameras,
+video doorbells, NVR/DVR ecosystems, body/fleet/ALPR cameras, action cams,
+camera drones, and Bluetooth item trackers. General networking, phones, and PCs
+are excluded to keep false alarms down.
+
 **Wi-Fi cameras & gear** are matched two ways, from the management frames the
 sensor already sees:
 - **Vendor OUI** — the first 3 bytes of a device's MAC identify its maker. The
   seed table in [`src/signatures.h`](src/signatures.h) covers Hikvision, Dahua,
-  Axis, Ubiquiti/UniFi, Amazon (Ring/Blink), and Google/Nest.
-- **SSID keywords** — an AP broadcasting (or a client probing for) an SSID
-  containing e.g. `flock`, `axon`, `reolink`, `wyze`, `arlo` is flagged.
+  Axis, Vivotek, Mobotix, GeoVision, ACTi, Wyze, Ubiquiti/UniFi, Amazon
+  (Ring/Blink), Google/Nest, plus GoPro (recording) and DJI (drone).
+- **SSID keywords** — an AP broadcasting (or a client probing for) a telltale
+  SSID (`flock`, `axon`, `verkada`, `reolink`, `ezviz`, `tapo`, `eufy`, `wyze`,
+  `arlo`, `gopro`, `dji-`, `cctv`, `doorbell`, …) is flagged. Each hit carries a
+  category: `camera`, `recording`, `drone`, or `surveillance`.
 
 **Bluetooth trackers** are caught by a BLE scanner running alongside the Wi-Fi
 sniffer on the ESP32-S3's second radio: **Apple Find My / AirTag** (offline-
@@ -80,13 +88,21 @@ finding advertisement), **Tile** (service UUID 0xFEED/0xFEEC), and **Samsung
 SmartTag** (service data 0xFD5A). Useful for spotting an unexpected tracker
 that's travelling with you.
 
+**Ignore your own devices.** So the sensor doesn't keep alerting on your own
+Ring/Nest/AirTag, list their MACs or SSIDs in `kSurveillanceIgnoreMacs` /
+`kSurveillanceIgnoreSsids` in [`src/config.h`](src/config.h) — matches there are
+suppressed on both radios.
+
 > **On accuracy:** OUIs are assigned per *vendor*, not per model, and vendors
 > own many blocks — so the OUI/keyword lists are a **curated seed, not gospel**.
 > A hit means "a device from this vendor is nearby," which is a lead, not a
-> verdict. The lists live in one file (`signatures.h`) and are meant to be
-> extended. **Flock Safety** cameras are LTE-first and don't reliably beacon on
-> Wi-Fi; the SSID keyword catches their provisioning/probe traffic when present,
-> and you can add a confirmed OUI to the table as the community documents them.
+> verdict. A wrong OUI simply never matches (it can't false-positive on someone
+> else's device); the shared Amazon/Google blocks are the exception and can flag
+> an Echo/Home speaker as a "camera," so prune those if it bothers you. The lists
+> live in one file (`signatures.h`) and are meant to be extended. **Flock
+> Safety** cameras are LTE-first and don't reliably beacon on Wi-Fi; the SSID
+> keyword catches their provisioning/probe traffic when present, and you can add
+> a confirmed OUI to the table as the community documents them.
 
 ---
 
@@ -204,9 +220,10 @@ USB hub, and the `sensor` field keeps every alert attributable.
 
 For a live GUI, `tools/dashboard.py` ingests the same sensor JSON and serves a
 browser dashboard that updates in real time (over Server-Sent Events): a live
-alert feed, per-sensor status cards, alert counters, and a table of every
-detected surveillance device / rogue AP. It's **standard library only** (plus
-pyserial for live capture) — no web framework, no build step, works offline.
+alert feed, per-sensor status cards, alert counters, and a searchable table of
+every detected surveillance device / rogue AP — with **Export CSV** for logging
+a survey walk. It's **standard library only** (plus pyserial for live capture)
+— no web framework, no build step, works offline.
 
 ```bash
 # live, from sensors
@@ -222,6 +239,11 @@ python3 tools/dashboard.py --replay grid.ndjson
 Then open **http://localhost:8080** (change with `--host` / `--port`). The
 console `collector.py` and the web `dashboard.py` read the same data — run
 either, or both, or point them at a shared `--log` file.
+
+> The dashboard binds to **localhost only** by default and has no
+> authentication — the alert stream includes device and AP MAC addresses. To
+> view it from another machine, pass `--host 0.0.0.0`, and only do so on a
+> network you trust.
 
 ---
 

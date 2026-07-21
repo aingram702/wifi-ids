@@ -6,8 +6,23 @@
 
 #include <Arduino.h>
 #include <string.h>
+#include <strings.h>  // strcasecmp
 
 static uint32_t s_ble_hits = 0;
+
+// ---------------------------------------------------------------------------
+// Ignore list — suppress alerts for the user's own known surveillance devices.
+// ---------------------------------------------------------------------------
+static bool surv_ignore_mac(const char* macstr) {
+  for (unsigned i = 0; i < sizeof(kSurveillanceIgnoreMacs) / sizeof(kSurveillanceIgnoreMacs[0]); i++)
+    if (strcasecmp(macstr, kSurveillanceIgnoreMacs[i]) == 0) return true;
+  return false;
+}
+static bool surv_ignore_ssid(const char* ssid) {
+  for (unsigned i = 0; i < sizeof(kSurveillanceIgnoreSsids) / sizeof(kSurveillanceIgnoreSsids[0]); i++)
+    if (strcmp(ssid, kSurveillanceIgnoreSsids[i]) == 0) return true;
+  return false;
+}
 
 // ---------------------------------------------------------------------------
 // De-dup registries. Each only holds devices that have *already* alerted, so
@@ -94,6 +109,9 @@ static void emit_wifi_ssid(const uint8_t* mac, const char* ssid,
 static void check_oui(const uint8_t* mac, uint8_t channel, int8_t rssi) {
   const OuiEntry* e = oui_lookup(mac);
   if (!e) return;
+  char m[18];
+  wifi_mac_to_str(mac, m);
+  if (surv_ignore_mac(m)) return;
   WifiSeen* s = wifi_seen_get(mac);
   if (s && !(s->flags & SEEN_OUI)) {
     s->flags |= SEEN_OUI;
@@ -127,6 +145,10 @@ void surveillance_wifi_frame(const uint8_t* frame, uint16_t len,
   if (ssid[0] == '\0') return;  // wildcard/broadcast probe
   const SsidKeyword* k = ssid_keyword_match(ssid);
   if (!k) return;
+  if (surv_ignore_ssid(ssid)) return;
+  char m2[18];
+  wifi_mac_to_str(a2, m2);
+  if (surv_ignore_mac(m2)) return;
   WifiSeen* s = wifi_seen_get(a2);
   if (s && !(s->flags & SEEN_SSID)) {
     s->flags |= SEEN_SSID;
@@ -171,6 +193,7 @@ void surveillance_ble_adv(const char* mac, int8_t rssi,
   }
 
   if (!sig) return;
+  if (surv_ignore_mac(mac)) return;
   if (ble_already_alerted(mac)) return;
   s_ble_hits++;
 
